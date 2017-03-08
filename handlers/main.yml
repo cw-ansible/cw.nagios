@@ -1,0 +1,17 @@
+---
+
+- name: Fix permissions (/var/lib/nagios3/rw)
+  shell:
+    dpkg-statoverride --update --add nagios www-data 2710 /var/lib/nagios3/rw || true
+  notify: Fix permissions (/var/lib/nagios3)
+    
+- name: Fix permissions (/var/lib/nagios3)
+  shell:
+    dpkg-statoverride --update --add nagios nagios 751 /var/lib/nagios3 || true
+  notify: ensure nagios password file exists
+
+- name: ensure nagios password file exists
+  file:
+    dest: /etc/nagios3/htpasswd.users
+    state: touch
+    

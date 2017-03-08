@@ -1,0 +1,68 @@
+---
+
+# here we need to first install nagios and run handlers only if nagios is
+# installed since there is no way to get an idempotent dpkg-statoverride for
+# specific directories.
+
+- name: install nagios server
+  apt:
+    name: '{{ item }}'
+    install_recommends: no
+    update_cache: yes
+    cache_valid_time: 3600
+  with_items:
+    - nagios3
+  notify: Fix permissions (/var/lib/nagios3/rw)
+  
+- name: install livestatus extension
+  apt:
+    name: '{{ item }}'
+    install_recommends: no
+    update_cache: yes
+    cache_valid_time: 3600
+  with_items:
+    - libmonitoring-livestatus-perl
+    - check-mk-livestatus
+    
+- name: Activate LiveStatus
+  lineinfile:
+    dest: /etc/nagios3/nagios.cfg
+    line: 'broker_module=/usr/lib/check_mk/livestatus.o /var/lib/nagios3/rw/livestatus'
+    insertafter: '#broker_module=/somewhere/module2.o arg1 arg2=3 debug=0'
+
+- name: Fix nagios configuration permission
+  file:
+    path: '{{ item.path }}'
+    owner: '{{ item.owner | default("nagios") }}'
+    group: '{{ item.group | default("www-data") }}'
+    mode: '{{ item.mode | default("0640") }}'
+    recurse: '{{ item.recurse | default(False) }}'
+  with_items:
+    - path: '/etc/nagios3/cgi.cfg'
+    - path: '/etc/nagios3/commands.cfg'
+    - path: '/etc/nagios3/nagios.cfg'
+    - path: '/etc/nagios3/resource.cfg'
+    - path: '/etc/nagios3/htpasswd.users'
+    - path: '/etc/nagios3/conf.d'
+      recurse: yes
+      mode: '0660'
+    # Thus is not very clean since previous line allways changes the prems
+    # of this directory. But there is no clean way to do it with ansible.
+    # See http://superuser.com/questions/1024677/ for alternatives using a
+    # 'command', but in that case ansible yields '[WARNING]: Consider using
+    # file module with mode rather than running chmod'.
+    - path: '/etc/nagios3/conf.d'
+      mode: '0750'
+  when: nagios_managed_configuration | default(False)
+
+
+- name: Relocate nagios files
+  relocate:
+    src: '{{ item.src }}'
+    dest: '{{ item.dest }}'
+    pre_cmd: '{{ item.pre_cmd | default() }}'
+    post_cmd: '{{ item.post_cmd | default() }}'
+    state: link
+    force: yes
+  when: nagios_relocate is defined
+  with_items: '{{ nagios_relocate }}'
